@@ -1,0 +1,100 @@
+## Context
+
+de-ai-ui は Claude Code 用のスキル（`/ui-review`）とサブエージェント（`ui-reviewer`）だけでできたリポジトリで、アプリのコードは持たない。`/ui-review` の流れは「分析はサブエージェント、ユーザーとの相談はメインの会話が AskUserQuestion で行う」「指摘は最大5件」「採用した方針を `docs/design-principles.md` に溜める」というもので、修正の実装はしない（OpenSpec に起票するだけ）。
+
+PowerPoint 版では、受入条件が「PowerPoint のデザインにも修正が入っている」なので、起票で止めずに修正版の .pptx まで作る。対象は利用者の手元の資料で、コードベースや dev サーバーは無い。
+
+開発環境: Windows 11、Python 3.12、python-pptx 1.0.2、PowerPoint 16.0（COM 操作は使える）、LibreOffice は無い。公開リポジトリなので、Mac/Linux の利用者も想定する。
+
+## Goals / Non-Goals
+
+**Goals:**
+- `input/` の .pptx 1ファイルについて、検出 → 選択式の相談 → 適用 → 検証 → `output/` への出力を1回の `/pptx-review` で終える。
+- デザイン（配色・グラデ・影・角丸、絵文字・アイコン、レイアウト・余白・整列）と本文の文章表現の両方を直せる。
+- マスター/テーマが原因の問題を、原因の側で直せる。
+- `/ui-review` と同じ使い心地にする（推奨案付きの選択式、最大5件、方針の蓄積）。
+
+**Non-Goals:**
+- `/ui-review` と `ui-reviewer` の変更。
+- 発表者ノートの書き換え、アニメーション・画面切り替え効果の修正。
+- 複数ファイルの一括処理、スライド番号の範囲指定。
+- .ppt（旧形式）、.potx、Google スライド、Keynote への対応。
+- 画像（写真・イラスト）自体の作り直しや差し替え。飾りアイコンの削除はするが、新しい画像は作らない。
+
+## Decisions
+
+### 1. `/ui-review` に統合せず、新スキル＋新サブエージェントに分ける
+入力（ファイルか dev サーバーか）、根拠の集め方（XML か DOM・CSS か）、出口（pptx の出力か OpenSpec の起票か）がすべて違う。`/ui-review --pptx` に統合すると SKILL.md の分岐が増えて、どちらも読みにくくなる。共通するのは「相談の作法」だけなので、それは SKILL.md の書き方を揃えることで合わせる。
+- 却下した案: `/ui-review --pptx`、引数の拡張子で自動判別。
+
+### 2. 役割分担: `pptx-reviewer` は分析だけ、相談と適用はメイン
+`ui-reviewer` と同じく、サブエージェントはユーザーに質問できないので、選択肢の提示はメインで行う。スライド画像や XML の大量読み込みをサブエージェント側に閉じ込め、メインの文脈を圧迫しないようにする。適用（ファイルの書き換え）はメインで行う。サブエージェントのツールは Read / Grep / Glob / Bash（同梱スクリプトの実行用）/ WebSearch / WebFetch とし、Write / Edit は与えない。
+- 却下した案: スキル単体で完結（大きなデッキで文脈が膨らむ）、サブエージェントに適用までさせる（相談結果を細かく渡す必要があり、失敗時の立て直しをメインで扱いにくい）。
+
+### 3. 定型処理はスクリプトとして同梱し、修正処理はその都度書く
+`.claude/skills/pptx-review/scripts/` に次の2本を置く。
+- `extract.py <pptx> <出力json>`: スライドごとの図形（種類、位置・サイズ、塗り〔単色/グラデ/画像〕、線、影などの効果、角丸の調整値、テキストと段落・書式、絵文字の有無）、使っているレイアウトとマスター、テーマの配色・フォントを JSON に書き出す。図形にはスライド番号と shape id を付け、指摘と適用で同じ図形を指せるようにする。
+- `render.py <pptx> <出力ディレクトリ> [--prefix before]`: スライドを `<prefix>-<番号>.png` に画像化する。PowerPoint の COM 操作（`pywin32` があればそれ、無ければ PowerShell 経由）を試し、だめなら `soffice --headless --convert-to pdf` で PDF にしてから画像化する。使った手段を標準出力に出す。
+
+修正は「角丸を外す」「グラデを単色にする」「文言を言い換える」など案ごとに形が違い、事前に部品化しても網羅できない。メインがその都度 python-pptx のスクリプトを `.pptx-review-tmp/` に書いて実行する。SKILL.md に、よく使う操作（`a:gradFill` → `a:solidFill`、`a:effectLst` の削除、`prstGeom` を `roundRect` から `rect` へ、`a:avLst` の調整値、マスターの `p:bg` の変更）の XML 上の位置を短くまとめておき、書き方のぶれを抑える。
+- 却下した案: 修正操作も関数化して同梱（初期実装が重いうえに網羅できない）、全部その都度書く（抽出・画像化は結果がぶれると比較できない）。
+
+### 4. 画像化は PowerPoint の COM 操作を優先し、無ければ LibreOffice
+PowerPoint での描画が利用者の見る実物にもっとも近い（フォントの代替や図形効果の描画差が無い）。公開リポジトリなので、Mac/Linux の利用者向けに LibreOffice での代替を残す。PDF からの PNG 変換には、LibreOffice の場合 `pdftoppm`（poppler）か PyMuPDF のうち使えるものを使い、どちらも無ければ導入方法を案内する。
+- 却下した案: PowerPoint のみ（Windows 限定になる）、LibreOffice のみ（今の環境に無く、描画が実物とずれる）。
+
+### 5. 編集は python-pptx と XML の直接操作
+python-pptx はインストール済みで OS を問わない。グラデ・影・角丸の調整値・マスターの背景は API で扱えない部分があるので、`element`（lxml）で DrawingML を直接書き換える。COM で編集すると Windows 限定になり、操作も遅く不安定になる。
+- 却下した案: PowerPoint の COM で編集、zip を展開して XML を手で編集。
+
+### 6. 指摘はパターン単位で最大5件、マスター起因はマスターで直す
+資料では同じ装飾が全スライドに繰り返し出るので、スライド単位で指摘すると同じ相談が何度も出る。パターン（例:「角丸＋影のカード」）を1件とし、該当スライドにまとめて適用する。原因がマスター/テーマにある場合は、そちらを直すと今後追加するスライドにも効くので推奨案にする。ただし社内テンプレートを壊すおそれがあるので、選択肢に【全スライドに影響】と明記し、個別の図形だけ直す案も並べる。
+
+### 7. 適用後に自動で検証してから出力を確定する
+レイアウトの変更や角丸カードの解除は、はみ出し・重なりを起こしやすい。After を画像化し、`pptx-reviewer` を `mode: verify` で呼んで Before/After を比べる。問題は相談にかけ、直す場合は「適用 → 検証」を繰り返す。終わらない往復を防ぐため、自動で直してから再検証するのは2回までとし、それでも残る問題は report.md に「未解決」として書いて出力する。
+
+### 8. ファイル配置と出力
+```
+input/                      # 利用者が .pptx を置く（中身は ignore）
+output/                     # 中身は ignore
+  <名前>-reviewed.pptx
+  <名前>-reviewed/
+    report.md
+    before-<n>.png / after-<n>.png
+.pptx-review-tmp/           # 作業用（ignore、終了時に削除）
+.claude/skills/pptx-review/
+  SKILL.md
+  anti-patterns.md          # 資料専用の検出基準
+  references.md             # 実在の公開資料・ガイド
+  templates/slide-principles.md
+  scripts/extract.py, render.py
+.claude/agents/pptx-reviewer.md
+docs/slide-principles.md    # 初回に templates からコピー
+```
+Before/After 画像は、変更したスライドだけを残す（変更の無いスライドの画像はレポートに不要）。Web 用と資料用ではよい形が違う（例: 表紙のタイトルの中央寄せは資料では普通）ので、方針は `docs/design-principles.md` と分けて `docs/slide-principles.md` に溜める。
+
+### 9. 検出基準 `anti-patterns.md` の中身
+`/ui-review` の4カテゴリ（角丸カード、飾りアイコン・絵文字、グラデ・影・意味のない色、均一な余白と中央寄せ）を土台に、兆候を DrawingML の要素名で書き直す（例: `prstGeom prst="roundRect"`、`a:gradFill`、`a:outerShdw`）。資料特有の項目として次を足す。
+- アイコン＋見出し＋短文のカードを3〜4個横に並べただけのスライド
+- 全スライドが箇条書きで、どの項目も同じ長さ・同じ重み
+- 「革新的」「シームレス」「〜を実現」「さらに」「重要なのは」など、AIが多用する言い回しと、体言止めの羅列
+- 本文・注記まで含めた全テキストの中央寄せ、内容と関係なく全スライドで同じレイアウト
+判断の基準は `/ui-review` と同じく「装飾を剥がすこと」ではなく「情報の重みと読む順番に合っているか」とする。
+
+## Risks / Trade-offs
+
+- [XML を直接書き換えて、PowerPoint で開けない／修復ダイアログが出る pptx ができる] → 書き換えのたびに python-pptx で開き直せるか確かめ、検証の画像化（PowerPoint で開く）で開けなかった場合はその修正を取り消して相談にかける。
+- [LibreOffice の描画が PowerPoint とずれ、誤った指摘や見落としが出る] → 指摘には XML 上の根拠を必須にする（画像だけの指摘は出さない）。report.md に画像化に使った手段を書く。
+- [マスターの変更で社内テンプレートの決まり（ロゴ、配色）を壊す] → 【全スライドに影響】と明記し、個別の図形だけ直す案を必ず並べる。ロゴなどの画像は変更しない。
+- [文言の言い換えで意味が変わる] → 言い換えは指摘ごとに選択式で相談し、案の preview に Before/After の文を出す。数字・固有名詞は変えない。
+- [機密資料をレビューする] → `input/` `output/` の中身を ignore する。サブエージェントの WebSearch に資料の本文を含めないよう、エージェント定義で禁止する。
+- [PowerPoint の COM 操作が残ったプロセスを作る、またはダイアログで止まる] → `render.py` で `DisplayAlerts` を切り、終了時に必ず `Quit()` する。タイムアウトしたら LibreOffice に切り替える。
+- [大きなデッキ（数十枚）で画像の読み込みが重い] → サブエージェントはまず抽出 JSON で候補を絞り、該当スライドの画像だけを見る。
+
+## Migration Plan
+
+新規追加だけなので移行は無い。戻すときは、追加したファイルを消し、`.gitignore` と README の追記を戻せばよい。
+
+## Open Questions
+
+- PDF → PNG の変換手段（`pdftoppm` か PyMuPDF か）は、実装時に依存の少ない方に決める。PowerPoint を使える環境では不要。
