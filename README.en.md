@@ -101,6 +101,15 @@ Implement the filed plan with your usual workflow (for example `/opsx:apply` wit
     references.md                    Curated reference apps (picked on the first run)
     templates/project.md             Project settings template (filled in as project.md on the first run)
     templates/design-principles.md   Design principles template
+  agents/pptx-reviewer.md            Deck analysis subagent (reads extracted structure and slide images, proposes; never edits)
+  skills/pptx-review/
+    SKILL.md                         The /pptx-review workflow (extract, consult, apply, verify, export)
+    anti-patterns.md                 Deck detection criteria (5 categories + principle violations)
+    references.md                    Curated reference decks and guides (picked on the first run)
+    templates/slide-principles.md    Slide principles template
+    scripts/                         Extraction (extract.py), rendering (render.py), sample deck (make_sample.py)
+input/                               Put the .pptx to review here (contents are git-ignored)
+output/                              Revised decks and reports (contents are git-ignored)
 .mcp.json                            Example Playwright MCP config
 ```
 
@@ -111,6 +120,60 @@ Implement the filed plan with your usual workflow (for example `/opsx:apply` wit
 - Only real, shipping apps are used as references — no template marketplaces, concept shots, or AI-generated showcases.
 - The screenshot browser runs with `--isolated` and never touches the user's own data. For screens that would otherwise be empty, describe how to load test data under "データの準備" (data preparation) in `project.md`.
 - `/ui-review` runs only when you invoke it explicitly (`disable-model-invocation: true`).
+
+## Reviewing PowerPoint decks (/pptx-review)
+
+Everyday PowerPoint decks show the same "AI look": three rounded cards with icons in a row, emoji in headings, purple-to-blue gradient backgrounds with drop shadows, body text centered, and phrases like "innovative", "seamless", "empower". `/pptx-review` finds these and writes out a revised .pptx.
+
+```text
+/pptx-review proposal.pptx     Review input/proposal.pptx → choose fixes → write the revised deck to output/
+/pptx-review                   Pick a .pptx from input/
+```
+
+1. Put the deck you want reviewed in `input/` (one file per run).
+2. It cross-checks the deck's structure (fills, shadows, corner radius, alignment, text, slide master and theme) against rendered slide images, groups issues of the same kind, and reports up to 5 in order of impact.
+3. For each issue you choose a fix from multiple-choice options. When the cause is in the slide master or theme, you get both a fix there (marked "affects all slides") and a fix limited to the affected slides.
+4. Chosen fixes are applied, then the result is rendered and checked for missed fixes, text overflow, overlaps, contrast, and newly introduced AI look before it is written out.
+5. Adopted rules are recorded one per line in `docs/slide-principles.md` and carried over to the next review.
+
+Output (the original in `input/` is never modified):
+
+```text
+output/
+  proposal-reviewed.pptx       Revised deck
+  proposal-reviewed/
+    report.md                  Issues, chosen fixes, what changed, verification
+    before-<n>.png / after-<n>.png   Before/After of the changed slides
+```
+
+It fixes slide design and the visible text on slides. Speaker notes, animations, and pictures/photos/logos are left untouched. Rewrites keep numbers and proper nouns as they are and never invent numbers.
+
+### Requirements for /pptx-review
+
+- Python 3 and [python-pptx](https://python-pptx.readthedocs.io/) (`pip install python-pptx`)
+- One of the following to render slides:
+  - Microsoft PowerPoint (Windows desktop). Used first when available.
+  - [LibreOffice](https://www.libreoffice.org/) (`soffice` on PATH), plus PyMuPDF (`pip install pymupdf`) or poppler's `pdftoppm` to turn the PDF into images
+
+Playwright MCP is not needed.
+
+### Installing /pptx-review
+
+Copy `.claude/` as for `/ui-review`, create `input/` and `output/` in the repository where you use it, and add the following to `.gitignore` so decks are never committed by accident:
+
+```text
+.pptx-review-tmp/
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+```
+
+To try it out, generate a sample deck packed with AI-looking elements:
+
+```sh
+python .claude/skills/pptx-review/scripts/make_sample.py input/sample.pptx
+```
 
 ## License
 
