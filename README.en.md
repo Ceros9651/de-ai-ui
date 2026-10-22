@@ -103,7 +103,7 @@ Implement the filed plan with your usual workflow (for example `/opsx:apply` wit
     templates/design-principles.md   Design principles template
   agents/pptx-reviewer.md            Deck analysis subagent (reads extracted structure and slide images, proposes; never edits)
   skills/pptx-review/
-    SKILL.md                         The /pptx-review workflow (extract, consult, apply, verify, export)
+    SKILL.md                         The /pptx-review workflow (extract, auto-pick recommended fixes, apply, verify, export)
     anti-patterns.md                 Deck detection criteria (5 categories + principle violations)
     references.md                    Curated reference decks and guides (picked on the first run)
     templates/slide-principles.md    Slide principles template
@@ -126,15 +126,17 @@ output/                              Revised decks and reports (contents are git
 Everyday PowerPoint decks show the same "AI look": three rounded cards with icons in a row, emoji in headings, purple-to-blue gradient backgrounds with drop shadows, body text centered, and phrases like "innovative", "seamless", "empower". `/pptx-review` finds these and writes out a revised .pptx.
 
 ```text
-/pptx-review proposal.pptx     Review input/proposal.pptx → choose fixes → write the revised deck to output/
-/pptx-review                   Pick a .pptx from input/
+/pptx-review proposal.pptx     Review input/proposal.pptx → fix every issue with the recommended option → write the revised deck to output/
+/pptx-review                   Use the most recently updated .pptx in input/
 ```
 
 1. Put the deck you want reviewed in `input/` (one file per run).
-2. It cross-checks the deck's structure (fills, shadows, corner radius, alignment, text, slide master and theme) against rendered slide images, groups issues of the same kind, and reports up to 5 in order of impact.
-3. For each issue you choose a fix from multiple-choice options. When the cause is in the slide master or theme, you get both a fix there (marked "affects all slides") and a fix limited to the affected slides.
-4. Chosen fixes are applied, then the result is rendered and checked for missed fixes, text overflow, overlaps, contrast, and newly introduced AI look before it is written out.
+2. It cross-checks the deck's structure (fills, shadows, corner radius, alignment, text, slide master and theme) against rendered slide images and groups issues of the same kind. There is no cap on the number of issues, and layout problems beyond the AI look (missing sources, unset fonts, master dimensions that don't match the slide size, and so on) are included.
+3. Each issue comes with 2–3 possible fixes, but it never stops to ask: the recommended fix is applied automatically for every issue. When the cause is in the slide master or theme, it is fixed there (affects all slides).
+4. The result is rendered and checked for missed fixes, text overflow, overlaps, contrast, and newly introduced AI look; anything found is fixed the recommended way too (up to 2 re-checks) before the deck is written out.
 5. Adopted rules are recorded one per line in `docs/slide-principles.md` and carried over to the next review.
+
+The fixes that were not chosen are listed in report.md, so you can ask for a different one afterwards. Facts only you know (such as the source of a figure) are never invented: a placeholder is added and listed under "Unresolved" in report.md. An existing output with the same name is overwritten.
 
 Output (the original in `input/` is never modified):
 
@@ -142,7 +144,7 @@ Output (the original in `input/` is never modified):
 output/
   proposal-reviewed.pptx       Revised deck
   proposal-reviewed/
-    report.md                  Issues, chosen fixes, what changed, verification
+    report.md                  Issues, recommended fixes applied, alternatives not chosen, what changed, verification
     before-<n>.png / after-<n>.png   Before/After of the changed slides
 ```
 

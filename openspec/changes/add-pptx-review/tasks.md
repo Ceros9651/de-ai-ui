@@ -36,9 +36,16 @@
 - [x] 6.1 `README.md` に `/pptx-review` の節（流れ、`input/` と `output/` の使い方、必要なもの: Python 3・python-pptx・PowerPoint または LibreOffice、導入手順）を足す
 - [x] 6.2 `README.en.md` に同じ内容を英語で足す
 
-## 7. 確認
+## 7. 推奨案の自動採用と全件修正（ユーザー要望による変更）
 
-- [x] 7.1 2.3 のサンプルを `input/` に置いて `/pptx-review` を最後まで通し、`output/<名前>-reviewed.pptx` が PowerPoint で修復ダイアログなしに開け、角丸・影・グラデ・絵文字・揃え・本文のいずれかが直っていること（受入条件: デザインに修正が入っている）、`input/` の元ファイルが変わっていないこと、report.md と before/after 画像ができていること、`docs/slide-principles.md` に方針が追記されたことを確かめる
-- [ ] 7.2 引数なし（候補が複数）、存在しないファイル名、すべて「そのままにする」、既存の出力がある場合の4通りで、spec のシナリオどおりに動くことを確かめる
-- [x] 7.3 `openspec validate add-pptx-review --strict` が通ることを確かめる
-- [ ] 7.4 （ユーザーが実行）普段使いの実際の資料で `/pptx-review` を試し、結果を確認する。実装担当はこのタスクにチェックを付けない
+- [x] 7.1 SKILL.md: AskUserQuestion を使わず、すべての指摘・検証の問題を推奨案で自動で直す。ファイル選択は更新日時の新しいもの、上書きは確認なし、方針の矛盾は「例外」に記録、report.md に「選ばなかった案」を残す
+- [x] 7.2 pptx-reviewer.md: 件数の上限を外し、「その他の気になる点」も指摘にする。各指摘・各問題に安全側の推奨案（適用内容付き）を必ず1つ付ける
+- [x] 7.3 spec・proposal・design・README（日本語・英語）を新しい振る舞いに合わせる
+- [ ] 7.4 sample.pptx で `/pptx-review` を最後まで通し、一度も確認が出ないこと、指摘がすべて直っていること、report.md に選ばなかった案が残ることを確かめる
+
+## 8. 確認
+
+- [x] 8.1 2.3 のサンプルを `input/` に置いて `/pptx-review` を最後まで通し、`output/<名前>-reviewed.pptx` が PowerPoint で修復ダイアログなしに開け、角丸・影・グラデ・絵文字・揃え・本文のいずれかが直っていること（受入条件: デザインに修正が入っている）、`input/` の元ファイルが変わっていないこと、report.md と before/after 画像ができていること、`docs/slide-principles.md` に方針が追記されたことを確かめる
+- [ ] 8.2 引数なし（候補が複数）、存在しないファイル名、指摘が0件、既存の出力がある場合の4通りで、spec のシナリオどおりに動くことを確かめる
+- [x] 8.3 `openspec validate add-pptx-review --strict` が通ることを確かめる
+- [ ] 8.4 （ユーザーが実行）普段使いの実際の資料で `/pptx-review` を試し、結果を確認する。実装担当はこのタスクにチェックを付けない
