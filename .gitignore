@@ -1,1 +1,6 @@
 .ui-review-tmp/
+.pptx-review-tmp/
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep

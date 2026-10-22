@@ -101,6 +101,15 @@ cp -r /tmp/de-ai-ui/.claude/. ./.claude/
     references.md                    厳選した参考アプリ（初回に候補から選んで登録）
     templates/project.md             プロジェクト設定のひな形（初回に project.md として埋める）
     templates/design-principles.md   デザイン方針ファイルのひな形
+  agents/pptx-reviewer.md            資料の分析担当のサブエージェント（抽出結果・スライド画像・案作成。編集しない）
+  skills/pptx-review/
+    SKILL.md                         /pptx-review の流れ（抽出・推奨案の自動選択・適用・検証・出力）
+    anti-patterns.md                 資料の検出基準（5カテゴリ＋方針違反）
+    references.md                    厳選した参考資料（初回に候補から選んで登録）
+    templates/slide-principles.md    スライド方針ファイルのひな形
+    scripts/                         抽出（extract.py）・画像化（render.py）・サンプル作成（make_sample.py）
+input/                               レビューしたい .pptx を置く（中身は git で無視）
+output/                              修正版とレポートが出る（中身は git で無視）
 .mcp.json                            Playwright MCP の設定例
 ```
 
@@ -111,6 +120,62 @@ cp -r /tmp/de-ai-ui/.claude/. ./.claude/
 - 参考にするのは実在するアプリだけです。テンプレート配布サイト、コンセプト作品、AI生成のショーケースは参考にしません。
 - 撮影用のブラウザは `--isolated` で起動し、利用者の端末のデータには触れません。空状態しか撮れない画面は、`project.md` の「データの準備」に撮影用のデータの入れ方を書けます。
 - `/ui-review` は明示的に呼んだときだけ動きます（`disable-model-invocation: true`）。
+
+## PowerPoint 資料のレビュー（/pptx-review）
+
+普段使いの PowerPoint 資料にも、同じ「AIっぽさ」が出ます。アイコン付きの角丸カードを3つ並べたスライド、見出しの絵文字、紫〜青のグラデーション背景と影、本文まで中央寄せ、「革新的」「シームレス」「〜を実現」のような文章。`/pptx-review` は、これを見つけて直した修正版の .pptx を書き出します。
+
+```text
+/pptx-review 提案資料.pptx     input/提案資料.pptx をレビュー → 全指摘を推奨案で自動修正 → output/ に修正版を書き出す
+/pptx-review                   input/ のいちばん新しい .pptx を対象にする
+```
+
+1. `input/` にレビューしたい .pptx を置きます（1回の実行で1ファイル）
+2. 資料の構造（図形の塗り・影・角丸・揃え・文章、スライドマスターとテーマ）とスライド画像を突き合わせて、問題を同じ種類ごとにまとめて指摘します。件数の上限は無く、AIっぽさ以外の体裁の問題（出典の欠落、フォントの指定漏れ、マスターの寸法のずれなど）も含みます
+3. 指摘ごとに修正案が2〜3個出ますが、途中で確認はせず、すべて推奨案を自動で選んで直します。原因がスライドマスターやテーマにある場合は、そちらを直します（【全スライドに影響】）
+4. 修正後の画像で、反映漏れ・文字のはみ出し・重なり・コントラスト・新たなAIっぽさを確かめ、見つかったものも推奨の直し方で直してから書き出します（再検証は2回まで）
+5. 採用した方針を `docs/slide-principles.md` に一行ルールとして溜め、次回に引き継ぎます
+
+選ばなかった案は report.md に残ります。別の直し方にしたいときは、それを見て指示してください。出典の中身など、ユーザーしか知らない事実は作らず、記入欄を置いて report.md の「未解決」に書きます。同名の出力があれば上書きします。
+
+出力は次のとおりです。`input/` の元ファイルは変更しません。
+
+```text
+output/
+  提案資料-reviewed.pptx       修正版
+  提案資料-reviewed/
+    report.md                  指摘・選んだ推奨案・選ばなかった案・変更した箇所・検証結果
+    before-<n>.png / after-<n>.png   変更したスライドの Before/After
+```
+
+直すのはスライドのデザインと本文の文章です。発表者ノート、アニメーション、画像・写真・ロゴは変更しません。文章の書き換えでは、数字・固有名詞を変えず、元に無い数字も作りません。
+
+### /pptx-review に必要なもの
+
+- Python 3 と [python-pptx](https://python-pptx.readthedocs.io/)（`pip install python-pptx`）
+- スライドの画像化に、次のどちらか
+  - Microsoft PowerPoint（Windows のデスクトップ版）。あればこちらを優先します
+  - [LibreOffice](https://www.libreoffice.org/)（`soffice` にパスを通す）と、PDF を画像にするための PyMuPDF（`pip install pymupdf`）か poppler の `pdftoppm`
+
+Playwright MCP は不要です。
+
+### /pptx-review の導入
+
+`/ui-review` と同じく `.claude/` をコピーしたうえで、使うリポジトリに `input/` と `output/` を作り、`.gitignore` に次を足します。資料を誤ってコミットしないためです。
+
+```text
+.pptx-review-tmp/
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+```
+
+動作確認には、AIっぽい要素を詰め込んだサンプル資料を作れます。
+
+```sh
+python .claude/skills/pptx-review/scripts/make_sample.py input/sample.pptx
+```
 
 ## ライセンス
 
